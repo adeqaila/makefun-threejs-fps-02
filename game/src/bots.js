@@ -225,6 +225,53 @@ export function createBots(scene, world, rngSeed = 7) {
     }
   }
 
+  // Hearing: a recent gunshot nearby pulls the bot toward it for a moment.
+  // Returns true when the bot turned toward the sound.
+  function reactToSound(bot, context) {
+    if (!bot.hearing || context.time - bot.hearing.time >= 2.5) return false;
+    if (bot.state === 'plant' || bot.state === 'defuse') return false;
+    setGoal(bot, nearestNode(world.nodes, bot.hearing.x, bot.hearing.z));
+    bot.hearing = null;
+    bot.state = 'advance';
+    return true;
+  }
+
+  // Hold a position until the hold timer runs out, then advance to a new goal.
+  function holdPosition(bot, dt, context) {
+    bot.holdTimer -= dt;
+    if (bot.holdTimer <= 0) {
+      bot.state = 'advance';
+      chooseGoal(bot, context);
+    }
+    bot.velocity.set(0, 0, 0);
+  }
+
+  // Walk the waypoint path (BFS route from setGoal). When the route ends, pick
+  // a new goal; the bomb carrier walks to a site and plants instead. Returns
+  // the point the bot should look at while walking, or null.
+  function followRoute(bot, dt, context) {
+    if (!bot.path.length || bot.pathIndex >= bot.path.length) {
+      if (bot.team === 'attacker' && context.bombState === 'carried' && bot.id === context.carrierId) {
+        bot.state = 'plant';
+      } else {
+        chooseGoal(bot, context);
+      }
+    }
+    const nodeName = bot.path[bot.pathIndex];
+    if (!nodeName) return null;
+    const [nx, nz] = world.nodes[nodeName];
+    const dx = nx - bot.position.x;
+    const dz = nz - bot.position.z;
+    const dist = Math.hypot(dx, dz);
+    if (dist < 0.6) {
+      bot.pathIndex += 1;
+      return null;
+    }
+    bot.velocity.x = (dx / dist) * BOT_SPEED;
+    bot.velocity.z = (dz / dist) * BOT_SPEED;
+    return new THREE.Vector3(nx, BOT_EYE, nz);
+  }
+
   function stepBot(bot, dt, context) {
     if (!bot.alive) return;
     const { player, playerAlive, plantSite, bombState, onShot, time } = context;
@@ -272,26 +319,14 @@ export function createBots(scene, world, rngSeed = 7) {
       }
     }
 
-    // Hearing: a recent gunshot nearby pulls the bot toward it for a moment.
-    if (!enemyPos && bot.hearing && time - bot.hearing.time < 2.5) {
-      if (bot.state !== 'plant' && bot.state !== 'defuse') {
-        setGoal(bot, nearestNode(world.nodes, bot.hearing.x, bot.hearing.z));
-        bot.hearing = null;
-        bot.state = 'advance';
-      }
-    }
+    if (!enemyPos) reactToSound(bot, context);
 
     // Planting / defusing channels are decided by main.js; here the bot only walks
     // to the right place and waits.
     if (bot.state === 'plant' || bot.state === 'defuse') {
       bot.velocity.set(0, 0, 0);
     } else if (bot.state === 'hold') {
-      bot.holdTimer -= dt;
-      if (bot.holdTimer <= 0) {
-        bot.state = 'advance';
-        chooseGoal(bot, context);
-      }
-      bot.velocity.set(0, 0, 0);
+      holdPosition(bot, dt, context);
     } else if (bot.state === 'engage') {
       // Strafe a little while shooting so the fight is not a statue contest.
       const strafe = Math.sin(time * 1.7 + bot.id.charCodeAt(0)) * 0.7;
@@ -303,28 +338,8 @@ export function createBots(scene, world, rngSeed = 7) {
       bot.velocity.x = px * strafe * BOT_SPEED * 0.5;
       bot.velocity.z = pz * strafe * BOT_SPEED * 0.5;
     } else {
-      // Walk the path. When it ends, pick a new goal.
-      if (!bot.path.length || bot.pathIndex >= bot.path.length) {
-        if (bot.team === 'attacker' && bombState === 'carried' && bot.id === context.carrierId) {
-          bot.state = 'plant';
-        } else {
-          chooseGoal(bot, context);
-        }
-      }
-      const nodeName = bot.path[bot.pathIndex];
-      if (nodeName) {
-        const [nx, nz] = world.nodes[nodeName];
-        const dx = nx - bot.position.x;
-        const dz = nz - bot.position.z;
-        const dist = Math.hypot(dx, dz);
-        if (dist < 0.6) {
-          bot.pathIndex += 1;
-        } else {
-          bot.velocity.x = (dx / dist) * BOT_SPEED;
-          bot.velocity.z = (dz / dist) * BOT_SPEED;
-          lookTarget = new THREE.Vector3(nx, BOT_EYE, nz);
-        }
-      }
+      const routeLook = followRoute(bot, dt, context);
+      if (routeLook) lookTarget = routeLook;
     }
 
     // Turn toward the look target, capped so bots do not snap instantly.

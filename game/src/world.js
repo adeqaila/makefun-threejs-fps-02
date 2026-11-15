@@ -148,9 +148,9 @@ export function createWorld(scene) {
   // Light: a warm dusk sky lifts every surface, a low warm sun from the west rakes
   // across the yard, a cool fill from the east keeps the far side readable, and the
   // furnace and depot glow from inside their sites.
-  const sky = new THREE.HemisphereLight(new THREE.Color('#a08a6a'), new THREE.Color('#554634'), 2.2);
+  const sky = new THREE.HemisphereLight(new THREE.Color('#a08a6a'), new THREE.Color('#554634'), 2.6);
   scene.add(sky);
-  const key = new THREE.DirectionalLight(new THREE.Color('#ffd9a0'), 2.6);
+  const key = new THREE.DirectionalLight(new THREE.Color('#ffd9a0'), 2.9);
   key.position.set(-10, 20, 14);
   key.target.position.set(4, 0, 0);
   key.castShadow = true;
@@ -166,7 +166,7 @@ export function createWorld(scene) {
   fill.position.set(12, 10, -12);
   scene.add(fill);
   // A second fill from the north-east so north-facing walls are not black.
-  const fillNorth = new THREE.DirectionalLight(new THREE.Color('#c9b896'), 0.8);
+  const fillNorth = new THREE.DirectionalLight(new THREE.Color('#c9b896'), 1.0);
   fillNorth.position.set(8, 12, -14);
   scene.add(fillNorth);
   const furnaceGlow = new THREE.PointLight(new THREE.Color(PALETTE.ember), 30, 16);

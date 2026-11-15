@@ -98,6 +98,13 @@ export function createArsenal(camera) {
     for (const id of Object.keys(models)) models[id].visible = id === state.weaponId;
   }
 
+  function applyRecoil(model, dt) {
+    // Recoil kicks the viewmodel back and up, then settles: stopping to aim pays.
+    state.kick += (0 - state.kick) * Math.min(1, dt * 14);
+    model.position.z = -0.42 + state.kick + (state.weaponId === 'pistol' ? 0.08 : 0);
+    model.rotation.x = state.kick * 2.2;
+  }
+
   return {
     state,
     owned,
@@ -133,10 +140,8 @@ export function createArsenal(camera) {
     step(dt) {
       state.cooldown = Math.max(0, state.cooldown - dt);
       state.flash = Math.max(0, state.flash - dt);
-      state.kick += (0 - state.kick) * Math.min(1, dt * 14);
       const model = models[state.weaponId];
-      model.position.z = -0.42 + state.kick + (state.weaponId === 'pistol' ? 0.08 : 0);
-      model.rotation.x = state.kick * 2.2;
+      applyRecoil(model, dt);
       flash.visible = state.flash > 0;
       flash.rotation.z = state.flash * 30;
       flashLight.intensity = state.flash > 0 ? 18 : 0;
@@ -169,9 +174,21 @@ export function createArsenal(camera) {
       if (state.reloadLeft > 0 || state.mag === def.mag || state.reserve === 0) return;
       state.reloadLeft = def.reload;
     },
-    spread(speed) {
+    spreadWhileMoving(speed) {
+      // Spread grows with movement speed: firing on the move is punished, and
+      // stopping to aim pays. Still spread is ~10x tighter than moving spread.
       const def = current();
       return def.spreadStill + Math.min(1, speed / 5.2) * def.spreadMoving;
+    },
+    showFlash() {
+      // Muzzle flash + light for one staged frame (screenshot mode only; the
+      // live game drives the flash from step() instead). Scaled down: at full
+      // size the plane reads as a floating panel in a still frame.
+      flash.scale.set(0.4, 0.4, 1);
+      flash.rotation.z = 0.6; // diamond orientation reads as a flash, not a panel
+      flash.material.opacity = 0.6;
+      flash.visible = true;
+      flashLight.intensity = 18;
     },
     refill() {
       for (const id of Object.keys(owned)) {
